@@ -137,6 +137,12 @@
         url: http://127.0.0.1:9000/api/qualityprofiles/search?language=java
       register: sonarqube_profiles
 
+    # 26.10 shows the built-in "Sonar way" as "Sonar way comprehensive", so resolve it by name on the server
+    - name: Look up Sonar way
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9000/api/qualityprofiles/search?language=java&qualityProfile=Sonar%20way
+      register: sonarqube_sonar_way
+
     - name: Read rule activations
       ansible.builtin.uri:
         url: "http://127.0.0.1:9000/api/rules/show?actives=true&key={{ item }}"
@@ -149,14 +155,14 @@
     - name: Assert the quality profile extends Sonar way with the listed rule changes
       vars:
         profile: "{{ sonarqube_profiles.json.profiles | selectattr('name', 'equalto', 'Molecule way') | first }}"
-        sonar_way: "{{ sonarqube_profiles.json.profiles | selectattr('name', 'equalto', 'Sonar way') | first }}"
+        sonar_way_key: "{{ sonarqube_sonar_way.json.profiles[0].key }}"
         activated: "{{ sonarqube_rules.results[0].json.actives | default([]) | map(attribute='qProfile') | list }}"
         deactivated: "{{ sonarqube_rules.results[1].json.actives | default([]) | map(attribute='qProfile') | list }}"
       ansible.builtin.assert:
         that:
           - profile.isDefault
-          - profile.parentName == 'Sonar way'
+          - profile.parentKey == sonar_way_key
           - profile.key in activated
-          - sonar_way.key not in activated
+          - sonar_way_key not in activated
           - profile.key not in deactivated
-          - sonar_way.key in deactivated
+          - sonar_way_key in deactivated

@@ -104,7 +104,8 @@ sonarqube_quality_gates:
       - {metric: new_coverage, op: LT, error: "80"}
       - {metric: new_duplicated_lines_density, op: GT, error: "3"}
 
-# Extends Sonar way unless parent is set; list only the rules that differ
+# Extends Sonar way unless parent is set, e.g. to "Sonar way core" on 26.10+;
+# list only the rules that differ
 sonarqube_quality_profiles:
   - name: Company way
     language: java
@@ -157,8 +158,8 @@ rolled back, so back up the database or snapshot its volume first.
 ## Testing
 
 The Molecule scenario installs the previous SonarQube release, upgrades it
-to the default one, and checks Nginx, LDAP against a local OpenLDAP and
-every admin setting.
+to the default one, checks that a second run changes nothing, and verifies
+Nginx, LDAP against a local OpenLDAP and every admin setting.
 
 ```bash
 sudo sysctl -w vm.max_map_count=524288

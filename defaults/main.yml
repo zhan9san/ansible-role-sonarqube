@@ -78,8 +78,9 @@ sonarqube_permission_templates: []
 #       - {metric: new_coverage, op: LT, error: "80"}
 sonarqube_quality_gates: []
 
-# Quality profiles extending a parent (Sonar way unless set), as SonarSource recommends,
-# so new rules arrive with upgrades; list only the rules that differ from the parent
+# Quality profiles extending a parent (Sonar way unless set; 26.10+ also has "Sonar way core"
+# and "Sonar way extended"), as SonarSource recommends, so new rules arrive with upgrades;
+# list only the rules that differ from the parent
 #   - name: Company way
 #     language: java
 #     default: true

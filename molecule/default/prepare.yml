@@ -73,3 +73,13 @@
       vars:
         sonarqube_ssl_cert: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/sonarqube.example.com.crt"
         sonarqube_ssl_key: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/sonarqube.example.com.key"
+
+# Converge then upgrades to the role default, so idempotence and verify run on the default version
+- name: Install the previous SonarQube release
+  hosts: all
+  vars:
+    sonarqube_version: "{{ lookup('env', 'SONARQUBE_FROM_VERSION') | default('26.9.0.129388', true) }}"
+  tasks:
+    - name: "Include zhan9san.sonarqube"
+      ansible.builtin.include_role:
+        name: "zhan9san.sonarqube"

@@ -24,6 +24,16 @@
       when: __sonarqube_profile | length == 0
       changed_when: true
 
+    # Responses show built-in profiles by display name (26.10 shows "Sonar way" as "Sonar way comprehensive"),
+    # so let the server resolve the parent name and compare keys instead
+    - name: Look up the parent of quality profile {{ sonarqube_quality_profile.name }}
+      ansible.builtin.uri:
+        url: >-
+          {{ __sonarqube_local_url }}/api/qualityprofiles/search?language={{ sonarqube_quality_profile.language | urlencode }}&qualityProfile={{
+          __sonarqube_profile_parent | urlencode }}
+      register: sonarqube_profile_parent
+      failed_when: sonarqube_profile_parent.json.profiles | default([]) | length == 0
+
     # Inherit first, so the rule changes below are made on top of the parent's rules
     - name: Set the parent of quality profile {{ sonarqube_quality_profile.name }}
       ansible.builtin.uri:
@@ -35,7 +45,7 @@
           qualityProfile: "{{ sonarqube_quality_profile.name }}"
           parentQualityProfile: "{{ __sonarqube_profile_parent }}"
         status_code: 204
-      when: __sonarqube_profile.parentName | default('') != __sonarqube_profile_parent
+      when: __sonarqube_profile.parentKey | default('') != sonarqube_profile_parent.json.profiles[0].key
       changed_when: true
 
     - name: Read rule activations for quality profile {{ sonarqube_quality_profile.name }}
