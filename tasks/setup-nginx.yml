@@ -29,7 +29,7 @@
 
 # SELinux only lets Nginx connect to http_port_t ports, which 9000 is not
 - name: Allow Nginx to connect to SonarQube
-  when: ansible_selinux.status | default('disabled') == 'enabled'
+  when: ansible_facts['selinux']['status'] | default('disabled') == 'enabled'
   block:
     - name: Install SELinux Python bindings
       ansible.builtin.package:
