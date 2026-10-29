@@ -20,6 +20,10 @@ platforms:
       - nofile:262144:262144
 provisioner:
   name: ansible
+  config_options:
+    defaults:
+      # Fail on top-level fact variables now, before ansible-core 2.24 stops injecting them
+      inject_facts_as_vars: false
   inventory:
     group_vars:
       all:
@@ -30,7 +34,7 @@ provisioner:
         sonarqube_ssl_key: ${MOLECULE_EPHEMERAL_DIRECTORY}/sonarqube.example.com.key
         # OpenLDAP started by prepare.yml on the instance's host network
         sonarqube_ldap_enabled: true
-        sonarqube_ldap_url: "ldap://{{ ansible_default_ipv4.address }}:389"
+        sonarqube_ldap_url: "ldap://{{ ansible_facts['default_ipv4']['address'] }}:389"
         sonarqube_ldap_bind_dn: cn=admin,dc=example,dc=com
         sonarqube_ldap_bind_password: admin-password
         sonarqube_ldap_user_base_dn: ou=people,dc=example,dc=com
