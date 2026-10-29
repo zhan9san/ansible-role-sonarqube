@@ -1,0 +1,12 @@
+---
+- name: Check Docker Compose is installed
+  ansible.builtin.command: docker compose version
+  changed_when: false
+
+- name: Set kernel parameters for Elasticsearch
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/99-sonarqube.conf
+    reload: true
+  loop: "{{ sonarqube_sysctl | dict2items }}"

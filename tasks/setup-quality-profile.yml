@@ -1,0 +1,89 @@
+---
+- name: List quality profiles for {{ sonarqube_quality_profile.language }}
+  ansible.builtin.uri:
+    url: "{{ __sonarqube_local_url }}/api/qualityprofiles/search?language={{ sonarqube_quality_profile.language | urlencode }}"
+  register: sonarqube_profiles
+
+- name: Manage quality profile
+  vars:
+    __sonarqube_profile: "{{ sonarqube_profiles.json.profiles | selectattr('name', 'equalto', sonarqube_quality_profile.name) | first | default({}) }}"
+    __sonarqube_profile_key: "{{ __sonarqube_profile.key | default(sonarqube_profile_created.json.profile.key | default('')) }}"
+    __sonarqube_profile_parent: "{{ sonarqube_quality_profile.parent | default('Sonar way') }}"
+    __sonarqube_profile_activate: "{{ sonarqube_quality_profile.activate | default([]) }}"
+    __sonarqube_profile_deactivate: "{{ sonarqube_quality_profile.deactivate | default([]) }}"
+  block:
+    - name: Create quality profile {{ sonarqube_quality_profile.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/qualityprofiles/create"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          name: "{{ sonarqube_quality_profile.name }}"
+          language: "{{ sonarqube_quality_profile.language }}"
+      register: sonarqube_profile_created
+      when: __sonarqube_profile | length == 0
+      changed_when: true
+
+    # Inherit first, so the rule changes below are made on top of the parent's rules
+    - name: Set the parent of quality profile {{ sonarqube_quality_profile.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/qualityprofiles/change_parent"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          language: "{{ sonarqube_quality_profile.language }}"
+          qualityProfile: "{{ sonarqube_quality_profile.name }}"
+          parentQualityProfile: "{{ __sonarqube_profile_parent }}"
+        status_code: 204
+      when: __sonarqube_profile.parentName | default('') != __sonarqube_profile_parent
+      changed_when: true
+
+    - name: Read rule activations for quality profile {{ sonarqube_quality_profile.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/rules/show?actives=true&key={{ item | urlencode }}"
+      loop: "{{ __sonarqube_profile_activate + __sonarqube_profile_deactivate }}"
+      register: sonarqube_profile_rules
+
+    - name: Activate rules in quality profile {{ sonarqube_quality_profile.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/qualityprofiles/activate_rule"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          key: "{{ __sonarqube_profile_key }}"
+          rule: "{{ item.item }}"
+        status_code: 204
+      loop: "{{ sonarqube_profile_rules.results | selectattr('item', 'in', __sonarqube_profile_activate) | list }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: __sonarqube_profile_key not in (item.json.actives | default([]) | map(attribute='qProfile') | list)
+      changed_when: true
+
+    - name: Deactivate rules in quality profile {{ sonarqube_quality_profile.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/qualityprofiles/deactivate_rule"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          key: "{{ __sonarqube_profile_key }}"
+          rule: "{{ item.item }}"
+        status_code: 204
+      loop: "{{ sonarqube_profile_rules.results | selectattr('item', 'in', __sonarqube_profile_deactivate) | list }}"
+      loop_control:
+        label: "{{ item.item }}"
+      when: __sonarqube_profile_key in (item.json.actives | default([]) | map(attribute='qProfile') | list)
+      changed_when: true
+
+    - name: Make quality profile the default {{ sonarqube_quality_profile.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/qualityprofiles/set_default"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          language: "{{ sonarqube_quality_profile.language }}"
+          qualityProfile: "{{ sonarqube_quality_profile.name }}"
+        status_code: 204
+      when:
+        - sonarqube_quality_profile.default | default(false) | bool
+        - not __sonarqube_profile.isDefault | default(false)
+      changed_when: true

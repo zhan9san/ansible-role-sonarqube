@@ -1,0 +1,26 @@
+dn: dc=example,dc=com
+objectClass: dcObject
+objectClass: organization
+o: Example
+dc: example
+
+dn: ou=people,dc=example,dc=com
+objectClass: organizationalUnit
+ou: people
+
+dn: ou=groups,dc=example,dc=com
+objectClass: organizationalUnit
+ou: groups
+
+dn: cn=Jane Doe,ou=people,dc=example,dc=com
+objectClass: inetOrgPerson
+cn: Jane Doe
+sn: Doe
+uid: jane
+mail: jane@example.com
+userPassword: jane-password
+
+dn: cn=sonar-admins,ou=groups,dc=example,dc=com
+objectClass: groupOfNames
+cn: sonar-admins
+member: cn=Jane Doe,ou=people,dc=example,dc=com

@@ -1,0 +1,3 @@
+---
+__sonarqube_local_host: "{{ '127.0.0.1' if sonarqube_listen_address == '0.0.0.0' else sonarqube_listen_address }}"
+__sonarqube_local_url: "http://{{ __sonarqube_local_host }}:{{ sonarqube_port }}"

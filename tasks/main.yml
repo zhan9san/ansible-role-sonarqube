@@ -1,0 +1,47 @@
+---
+- name: Check required variables
+  ansible.builtin.assert:
+    that:
+      - sonarqube_db_password | length > 0
+      - "\"'\" not in sonarqube_db_password"
+    fail_msg: sonarqube_db_password must be set and must not contain a single quote
+  tags: always
+
+- name: Check LDAP variables
+  ansible.builtin.assert:
+    that:
+      - sonarqube_ldap_url | length > 0
+      - "\"'\" not in sonarqube_ldap_bind_password"
+    fail_msg: sonarqube_ldap_url must be set and sonarqube_ldap_bind_password must not contain a single quote
+  when: sonarqube_ldap_enabled | bool
+  tags: always
+
+- name: Set up host
+  ansible.builtin.include_tasks:
+    file: setup-host.yml
+    apply:
+      tags: install
+  tags: install
+
+- name: Set up SonarQube
+  ansible.builtin.include_tasks:
+    file: setup-sonarqube.yml
+    apply:
+      tags: install
+  tags: install
+
+- name: Set up admin
+  ansible.builtin.include_tasks:
+    file: setup-admin.yml
+    apply:
+      tags: admin
+  when: sonarqube_admin_password | length > 0
+  tags: admin
+
+- name: Set up Nginx
+  ansible.builtin.include_tasks:
+    file: setup-nginx.yml
+    apply:
+      tags: nginx
+  when: sonarqube_nginx_proxy | bool
+  tags: nginx

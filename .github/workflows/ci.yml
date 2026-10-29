@@ -1,0 +1,51 @@
+---
+name: CI
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  schedule:
+    # Run every Monday at 9:00 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch: # Allows manual trigger
+
+jobs:
+  lint:
+    name: Ansible Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # needed for progressive mode to work
+      - name: Run ansible-lint
+        uses: ansible/ansible-lint@main
+
+  molecule:
+    name: Molecule
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        distro:
+          - rockylinux9
+          - ubuntu2404
+    steps:
+      - name: Check out the codebase.
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.x'
+
+      - name: Install test dependencies.
+        run: pip3 install ansible molecule-plugins[docker]
+
+      # The kernel is shared, so Elasticsearch inside the nested containers needs it raised here
+      - name: Raise vm.max_map_count for Elasticsearch.
+        run: sudo sysctl -w vm.max_map_count=524288
+
+      - name: Run Molecule tests.
+        run: molecule test
+        env:
+          MOLECULE_DISTRO: ${{ matrix.distro }}

@@ -1,0 +1,105 @@
+---
+- name: List permission templates
+  ansible.builtin.uri:
+    url: "{{ __sonarqube_local_url }}/api/permissions/search_templates"
+  register: sonarqube_templates
+
+- name: Manage permission template
+  vars:
+    __sonarqube_template: >-
+      {{ sonarqube_templates.json.permissionTemplates
+      | selectattr('name', 'equalto', sonarqube_permission_template.name) | first | default({}) }}
+    __sonarqube_template_creator: >-
+      {{ __sonarqube_template.permissions | default([])
+      | selectattr('withProjectCreator', 'defined') | selectattr('withProjectCreator') | map(attribute='key') | list }}
+    __sonarqube_template_groups: "{{ sonarqube_permission_template.groups | default({}) }}"
+  block:
+    - name: Create permission template {{ sonarqube_permission_template.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/permissions/create_template"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          name: "{{ sonarqube_permission_template.name }}"
+      when: __sonarqube_template | length == 0
+      changed_when: true
+
+    # api/permissions/template_groups is internal, but it is the only API that returns a template's group permissions
+    - name: Read group permissions of permission template {{ sonarqube_permission_template.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/permissions/template_groups?ps=100&templateName={{ sonarqube_permission_template.name | urlencode }}"
+      register: sonarqube_template_permissions
+
+    - name: Grant group permissions in permission template {{ sonarqube_permission_template.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/permissions/add_group_to_template"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          templateName: "{{ sonarqube_permission_template.name }}"
+          groupName: "{{ item.0.key }}"
+          permission: "{{ item.1 }}"
+        status_code: 204
+      loop: "{{ __sonarqube_template_groups | dict2items | subelements('value') }}"
+      loop_control:
+        label: "{{ item.0.key }} {{ item.1 }}"
+      when: >-
+        item.1 not in (sonarqube_template_permissions.json.groups | default([])
+        | selectattr('name', 'equalto', item.0.key) | map(attribute='permissions') | first | default([]))
+      changed_when: true
+
+    - name: Revoke unlisted group permissions in permission template {{ sonarqube_permission_template.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/permissions/remove_group_from_template"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          templateName: "{{ sonarqube_permission_template.name }}"
+          groupName: "{{ item.0.name }}"
+          permission: "{{ item.1 }}"
+        status_code: 204
+      loop: "{{ sonarqube_template_permissions.json.groups | default([]) | subelements('permissions', skip_missing=True) }}"
+      loop_control:
+        label: "{{ item.0.name }} {{ item.1 }}"
+      when: item.1 not in __sonarqube_template_groups[item.0.name] | default([])
+      changed_when: true
+
+    - name: Grant project creator permissions in permission template {{ sonarqube_permission_template.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/permissions/add_project_creator_to_template"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          templateName: "{{ sonarqube_permission_template.name }}"
+          permission: "{{ item }}"
+        status_code: 204
+      loop: "{{ sonarqube_permission_template.project_creator | default([]) | difference(__sonarqube_template_creator) }}"
+      changed_when: true
+
+    - name: Revoke unlisted project creator permissions in permission template {{ sonarqube_permission_template.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/permissions/remove_project_creator_from_template"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          templateName: "{{ sonarqube_permission_template.name }}"
+          permission: "{{ item }}"
+        status_code: 204
+      loop: "{{ __sonarqube_template_creator | difference(sonarqube_permission_template.project_creator | default([])) }}"
+      changed_when: true
+
+    - name: Make permission template the project default {{ sonarqube_permission_template.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/permissions/set_default_template"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          templateName: "{{ sonarqube_permission_template.name }}"
+          qualifier: TRK
+        status_code: 204
+      when:
+        - sonarqube_permission_template.default | default(false) | bool
+        - >-
+          __sonarqube_template.id | default('') not in
+          (sonarqube_templates.json.defaultTemplates | selectattr('qualifier', 'equalto', 'TRK') | map(attribute='templateId') | list)
+      changed_when: true

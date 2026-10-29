@@ -1,0 +1,64 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: docker
+platforms:
+  - name: "${MOLECULE_DISTRO:-ubuntu2404}"
+    image: "geerlingguy/docker-${MOLECULE_DISTRO:-ubuntu2404}-ansible:latest"
+    command: ${MOLECULE_DOCKER_COMMAND:-""}
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      # Docker in Docker cannot put overlayfs on top of the container's overlayfs;
+      # Docker 29+ keeps image layers in the containerd store
+      - /var/lib/docker
+      - /var/lib/containerd
+    cgroupns_mode: host
+    privileged: true
+    pre_build_image: true
+    ulimits:
+      - nofile:262144:262144
+provisioner:
+  name: ansible
+  inventory:
+    group_vars:
+      all:
+        sonarqube_db_password: molecule-db-password
+        sonarqube_admin_password: Molecule-Admin-1
+        sonarqube_ssl_enabled: true
+        sonarqube_ssl_cert: ${MOLECULE_EPHEMERAL_DIRECTORY}/sonarqube.example.com.crt
+        sonarqube_ssl_key: ${MOLECULE_EPHEMERAL_DIRECTORY}/sonarqube.example.com.key
+        # OpenLDAP started by prepare.yml on the instance's host network
+        sonarqube_ldap_enabled: true
+        sonarqube_ldap_url: "ldap://{{ ansible_default_ipv4.address }}:389"
+        sonarqube_ldap_bind_dn: cn=admin,dc=example,dc=com
+        sonarqube_ldap_bind_password: admin-password
+        sonarqube_ldap_user_base_dn: ou=people,dc=example,dc=com
+        sonarqube_ldap_user_request: (&(objectClass=inetOrgPerson)(mail={login}))
+        sonarqube_ldap_group_base_dn: ou=groups,dc=example,dc=com
+        sonarqube_ldap_group_request: (&(objectClass=groupOfNames)(member={dn}))
+        sonarqube_ldap_group_id_attribute: cn
+        sonarqube_groups:
+          - name: sonar-admins
+            permissions:
+              - admin
+        sonarqube_permission_templates:
+          - name: molecule-template
+            default: true
+            groups:
+              sonar-users: [user, codeviewer]
+              sonar-admins: [admin, issueadmin]
+            project_creator: [admin]
+        # A new gate gets SonarQube's default conditions; duplication differs from them to exercise updates
+        sonarqube_quality_gates:
+          - name: Molecule way
+            default: true
+            conditions:
+              - {metric: new_coverage, op: LT, error: "80"}
+              - {metric: new_duplicated_lines_density, op: GT, error: "5"}
+        sonarqube_quality_profiles:
+          - name: Molecule way
+            language: java
+            default: true
+            activate: [java:S1176]
+            deactivate: [java:S106]

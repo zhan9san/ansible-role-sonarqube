@@ -1,0 +1,106 @@
+---
+# https://hub.docker.com/_/sonarqube/tags
+sonarqube_version: "26.10.0.133078"
+sonarqube_edition: community
+sonarqube_image: "sonarqube:{{ sonarqube_version }}-{{ sonarqube_edition }}"
+
+sonarqube_install_dir: /opt/sonarqube
+
+# Keep it on loopback so Nginx is the only way in
+sonarqube_listen_address: 127.0.0.1
+sonarqube_port: 9000
+
+# Extra environment for the sonarqube container, e.g. SONAR_WEB_JAVAADDITIONALOPTS
+sonarqube_env: {}
+
+# Embedded Elasticsearch refuses to start below these values
+sonarqube_sysctl:
+  vm.max_map_count: 524288
+  fs.file-max: 131072
+
+# For PostgreSQL
+sonarqube_db_image: "postgres:17"
+# postgres 18+ images keep their data in /var/lib/postgresql
+sonarqube_db_data_dir: /var/lib/postgresql/data
+sonarqube_db_name: sonar
+sonarqube_db_user: sonar
+# Required; must not contain a single quote
+sonarqube_db_password: ""
+
+# Replaces the built-in admin/admin password and lets the role set the server base URL.
+# Needs 12+ characters with an uppercase, a lowercase, a digit and a special character.
+sonarqube_admin_password: ""
+
+# Startup and database migrations may take up to retries * delay seconds
+sonarqube_wait_retries: 90
+sonarqube_wait_delay: 10
+
+# For LDAP; SonarQube reads these settings from the environment at startup
+sonarqube_ldap_enabled: false
+# e.g. ldap://dc.example.com:3268 for an Active Directory global catalog
+sonarqube_ldap_url: ""
+sonarqube_ldap_bind_dn: ""
+# Keep it in ansible-vault; must not contain a single quote
+sonarqube_ldap_bind_password: ""
+sonarqube_ldap_user_base_dn: ""
+# {login} is what people type on the login page; the defaults suit Active Directory
+sonarqube_ldap_user_request: "(&(objectClass=user)(sAMAccountName={login}))"
+sonarqube_ldap_user_real_name_attribute: cn
+sonarqube_ldap_user_email_attribute: mail
+# Memberships are synced at each login into SonarQube groups of the same name; "" turns it off
+sonarqube_ldap_group_base_dn: ""
+sonarqube_ldap_group_request: "(&(objectClass=group)(member={dn}))"
+sonarqube_ldap_group_id_attribute: sAMAccountName
+# Otherwise an unreachable LDAP server stops SonarQube from starting at all
+sonarqube_ldap_ignore_startup_failure: true
+
+# Groups to create with global permissions (admin, gateadmin, profileadmin, provisioning, scan),
+# e.g. to receive LDAP members. Needs sonarqube_admin_password; permissions are only ever added.
+#   - name: sonar-admins
+#     permissions: [admin]
+sonarqube_groups: []
+
+# Permission templates for new projects; each listed template keeps exactly these permissions.
+# Project permissions: admin, codeviewer, issueadmin, securityhotspotadmin, scan, user
+#   - name: company-default
+#     default: true
+#     groups:
+#       sonar-users: [user, codeviewer]
+#       sonar-admins: [admin]
+#     project_creator: [admin]
+sonarqube_permission_templates: []
+
+# Quality gates; each listed gate keeps exactly these conditions, replacing the defaults
+# SonarQube adds to a new gate. The built-in Sonar way gate cannot be changed.
+#   - name: Company way
+#     default: true
+#     conditions:
+#       - {metric: new_coverage, op: LT, error: "80"}
+sonarqube_quality_gates: []
+
+# Quality profiles extending a parent (Sonar way unless set), as SonarSource recommends,
+# so new rules arrive with upgrades; list only the rules that differ from the parent
+#   - name: Company way
+#     language: java
+#     default: true
+#     activate: [java:S1176]
+#     deactivate: [java:S106]
+sonarqube_quality_profiles: []
+
+# For Nginx
+sonarqube_nginx_proxy: true
+
+sonarqube_ssl_enabled: false
+# Looked up like any copy src, so the key can be an ansible-vault encrypted file.
+# The certificate must include the intermediate chain or scanners fail with PKIX errors.
+sonarqube_ssl_cert: example.com.crt
+sonarqube_ssl_key: example.com.key
+sonarqube_ssl_dir: /etc/nginx/ssl
+
+sonarqube_server_name: sonarqube.example.com
+sonarqube_schema: "{{ 'https' if sonarqube_ssl_enabled else 'http' }}"
+# Server base URL used in emails and PR decoration links; set only when sonarqube_admin_password is set
+sonarqube_url: "{{ sonarqube_schema }}://{{ sonarqube_server_name }}"
+
+# Scanners upload the whole analysis report in one request
+sonarqube_client_max_body_size: 100m

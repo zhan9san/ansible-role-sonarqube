@@ -1,0 +1,7 @@
+---
+- name: Upgrade SonarQube
+  hosts: all
+  tasks:
+    - name: "Include zhan9san.sonarqube"
+      ansible.builtin.include_role:
+        name: "zhan9san.sonarqube"

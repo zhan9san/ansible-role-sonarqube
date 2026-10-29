@@ -1,0 +1,33 @@
+---
+# api/permissions/groups is internal, but it is the only API that returns a group's global permissions
+- name: Look up group {{ sonarqube_group.name }}
+  ansible.builtin.uri:
+    url: "{{ __sonarqube_local_url }}/api/permissions/groups?ps=100&q={{ sonarqube_group.name | urlencode }}"
+  register: sonarqube_group_lookup
+
+- name: Create group and grant permissions
+  vars:
+    __sonarqube_group_found: "{{ sonarqube_group_lookup.json.groups | selectattr('name', 'equalto', sonarqube_group.name) | list }}"
+  block:
+    - name: Create group {{ sonarqube_group.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/v2/authorizations/groups"
+        method: POST
+        body_format: json
+        body:
+          name: "{{ sonarqube_group.name }}"
+        status_code: 201
+      when: __sonarqube_group_found | length == 0
+      changed_when: true
+
+    - name: Grant global permissions to group {{ sonarqube_group.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/permissions/add_group"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          groupName: "{{ sonarqube_group.name }}"
+          permission: "{{ item }}"
+        status_code: 204
+      loop: "{{ sonarqube_group.permissions | default([]) | difference(__sonarqube_group_found | map(attribute='permissions') | first | default([])) }}"
+      changed_when: true

@@ -1,0 +1,98 @@
+---
+- name: Check whether the admin password is already set
+  ansible.builtin.uri:
+    url: "{{ __sonarqube_local_url }}/api/authentication/validate"
+    url_username: admin
+    url_password: "{{ sonarqube_admin_password }}"
+    force_basic_auth: true
+  register: sonarqube_admin_login
+
+- name: Change the default admin password
+  ansible.builtin.uri:
+    url: "{{ __sonarqube_local_url }}/api/users/change_password"
+    method: POST
+    url_username: admin
+    url_password: admin
+    force_basic_auth: true
+    body_format: form-urlencoded
+    body:
+      login: admin
+      previousPassword: admin
+      password: "{{ sonarqube_admin_password }}"
+    status_code: 204
+  when: not sonarqube_admin_login.json.valid
+  changed_when: true
+  no_log: true
+
+- name: Get the server base URL
+  ansible.builtin.uri:
+    url: "{{ __sonarqube_local_url }}/api/settings/values?keys=sonar.core.serverBaseURL"
+    url_username: admin
+    url_password: "{{ sonarqube_admin_password }}"
+    force_basic_auth: true
+  register: sonarqube_base_url
+
+# sonar.core.serverBaseURL cannot be set through the environment, only sonar.properties or the API
+- name: Set the server base URL
+  ansible.builtin.uri:
+    url: "{{ __sonarqube_local_url }}/api/settings/set"
+    method: POST
+    url_username: admin
+    url_password: "{{ sonarqube_admin_password }}"
+    force_basic_auth: true
+    body_format: form-urlencoded
+    body:
+      key: sonar.core.serverBaseURL
+      value: "{{ sonarqube_url }}"
+    status_code: 204
+  when: (sonarqube_base_url.json.settings | map(attribute='value') | first | default('')) != sonarqube_url
+  changed_when: true
+
+# The files below call the API as admin with the new password
+- name: Set up groups
+  ansible.builtin.include_tasks:
+    file: setup-group.yml
+    apply:
+      tags: admin
+      module_defaults: &admin_api
+        ansible.builtin.uri:
+          url_username: admin
+          url_password: "{{ sonarqube_admin_password }}"
+          force_basic_auth: true
+  loop: "{{ sonarqube_groups }}"
+  loop_control:
+    loop_var: sonarqube_group
+    label: "{{ sonarqube_group.name }}"
+
+- name: Set up permission templates
+  ansible.builtin.include_tasks:
+    file: setup-permission-template.yml
+    apply:
+      tags: admin
+      module_defaults: *admin_api
+  loop: "{{ sonarqube_permission_templates }}"
+  loop_control:
+    loop_var: sonarqube_permission_template
+    label: "{{ sonarqube_permission_template.name }}"
+
+- name: Set up quality gates
+  ansible.builtin.include_tasks:
+    file: setup-quality-gate.yml
+    apply:
+      tags: admin
+      module_defaults: *admin_api
+  loop: "{{ sonarqube_quality_gates }}"
+  loop_control:
+    loop_var: sonarqube_quality_gate
+    label: "{{ sonarqube_quality_gate.name }}"
+
+- name: Set up quality profiles
+  ansible.builtin.include_tasks:
+    file: setup-quality-profile.yml
+    apply:
+      tags: admin
+      module_defaults: *admin_api
+  loop: "{{ sonarqube_quality_profiles }}"
+  loop_control:
+    loop_var: sonarqube_quality_profile
+    label: "{{ sonarqube_quality_profile.language }}/{{ sonarqube_quality_profile.name }}"

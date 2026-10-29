@@ -1,0 +1,10 @@
+---
+# Starts from the previous release so side_effect.yml can test the upgrade to the role default
+- name: Converge
+  hosts: all
+  vars:
+    sonarqube_version: "{{ lookup('env', 'SONARQUBE_FROM_VERSION') | default('26.9.0.129388', true) }}"
+  tasks:
+    - name: "Include zhan9san.sonarqube"
+      ansible.builtin.include_role:
+        name: "zhan9san.sonarqube"

@@ -1,0 +1,34 @@
+{% if sonarqube_ssl_enabled %}
+server {
+  listen 80;
+  server_name {{ sonarqube_server_name }};
+  return 301 https://$host$request_uri;
+}
+
+{% endif %}
+server {
+{% if sonarqube_ssl_enabled %}
+  listen 443 ssl;
+  ssl_certificate     {{ sonarqube_ssl_dir }}/{{ sonarqube_ssl_cert | basename }};
+  ssl_certificate_key {{ sonarqube_ssl_dir }}/{{ sonarqube_ssl_key | basename }};
+  ssl_protocols       TLSv1.2 TLSv1.3;
+{% else %}
+  listen 80;
+{% endif %}
+  server_name {{ sonarqube_server_name }};
+
+  access_log /var/log/nginx/sonarqube.access.log;
+  error_log  /var/log/nginx/sonarqube.error.log;
+
+  # Nginx's 1m default rejects scanner report uploads with 413
+  client_max_body_size {{ sonarqube_client_max_body_size }};
+
+  location / {
+    proxy_pass         {{ __sonarqube_local_url }};
+    proxy_set_header   Host              $host;
+    proxy_set_header   X-Real-IP         $remote_addr;
+    proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Forwarded-Proto $scheme;
+    proxy_read_timeout 300s;
+  }
+}

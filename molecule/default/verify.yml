@@ -1,0 +1,162 @@
+---
+- name: Verify SonarQube upgrade
+  hosts: all
+  vars:
+    # Only the version; loading every default would override the molecule group_vars
+    sonarqube_image: "sonarqube:{{ (lookup('ansible.builtin.file', playbook_dir ~ '/../../defaults/main.yml') | from_yaml).sonarqube_version }}-community"
+  tasks:
+    - name: Read the SonarQube container
+      ansible.builtin.command: docker inspect --type container sonarqube
+      register: sonarqube_container
+      changed_when: false
+
+    - name: Assert SonarQube runs the default image
+      ansible.builtin.assert:
+        that:
+          - (sonarqube_container.stdout | from_json)[0].Config.Image == sonarqube_image
+        fail_msg: "Expected {{ sonarqube_image }}."
+
+    - name: Read the published SonarQube port
+      ansible.builtin.command: docker port sonarqube 9000/tcp
+      register: sonarqube_port_binding
+      changed_when: false
+
+    - name: Assert SonarQube only listens on loopback
+      ansible.builtin.assert:
+        that:
+          - sonarqube_port_binding.stdout_lines == ['127.0.0.1:9000']
+        fail_msg: "SonarQube is published on {{ sonarqube_port_binding.stdout_lines }}."
+
+- name: Verify Nginx
+  hosts: all
+  tasks:
+    - name: Redirect http to https
+      ansible.builtin.uri:
+        url: http://127.0.0.1/
+        headers:
+          Host: sonarqube.example.com
+        follow_redirects: none
+        status_code: 301
+
+    - name: Reach SonarQube over https
+      ansible.builtin.uri:
+        url: https://127.0.0.1/api/system/status
+        headers:
+          Host: sonarqube.example.com
+        validate_certs: false
+      register: sonarqube_status
+
+    - name: Assert SonarQube is up
+      ansible.builtin.assert:
+        that:
+          - sonarqube_status.json.status == 'UP'
+
+- name: Verify admin settings
+  hosts: all
+  tasks:
+    - name: Read the server base URL with the new admin password
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9000/api/settings/values?keys=sonar.core.serverBaseURL
+        url_username: admin
+        url_password: "{{ sonarqube_admin_password }}"
+        force_basic_auth: true
+      register: sonarqube_base_url
+
+    - name: Assert the server base URL is set
+      ansible.builtin.assert:
+        that:
+          - sonarqube_base_url.json.settings[0].value == 'https://sonarqube.example.com'
+
+- name: Verify LDAP
+  hosts: all
+  tasks:
+    - name: Log in with an LDAP email and password
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9000/api/authentication/validate
+        url_username: jane@example.com
+        url_password: jane-password
+        force_basic_auth: true
+      register: sonarqube_ldap_login
+
+    - name: Assert the LDAP login is valid
+      ansible.builtin.assert:
+        that:
+          - sonarqube_ldap_login.json.valid
+
+    # Only passes if the LDAP group sonar-admins was synced into the group the role created with admin permission
+    - name: Call an admin-only API as the LDAP user
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9000/api/system/info
+        url_username: jane@example.com
+        url_password: jane-password
+        force_basic_auth: true
+
+- name: Verify permission templates, quality gates and quality profiles
+  hosts: all
+  module_defaults:
+    ansible.builtin.uri:
+      url_username: admin
+      url_password: "{{ sonarqube_admin_password }}"
+      force_basic_auth: true
+  tasks:
+    - name: Read permission templates
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9000/api/permissions/search_templates
+      register: sonarqube_templates
+
+    - name: Read group permissions of molecule-template
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9000/api/permissions/template_groups?ps=100&templateName=molecule-template
+      register: sonarqube_template_groups
+
+    - name: Assert molecule-template is the default with exactly the listed permissions
+      vars:
+        template: "{{ sonarqube_templates.json.permissionTemplates | selectattr('name', 'equalto', 'molecule-template') | first }}"
+        template_groups: "{{ sonarqube_template_groups.json.groups | default([]) }}"
+      ansible.builtin.assert:
+        that:
+          - template.id in (sonarqube_templates.json.defaultTemplates | map(attribute='templateId'))
+          - (template_groups | selectattr('name', 'equalto', 'sonar-users') | first).permissions | sort == ['codeviewer', 'user']
+          - (template_groups | selectattr('name', 'equalto', 'sonar-admins') | first).permissions | sort == ['admin', 'issueadmin']
+          - template.permissions | selectattr('withProjectCreator', 'defined') | selectattr('withProjectCreator') | map(attribute='key') | list == ['admin']
+
+    - name: Read the Molecule way quality gate
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9000/api/qualitygates/show?name=Molecule%20way
+      register: sonarqube_gate
+
+    - name: Assert the quality gate is the default with exactly the listed conditions
+      ansible.builtin.assert:
+        that:
+          - sonarqube_gate.json.isDefault
+          - sonarqube_gate.json.conditions | map(attribute='metric') | sort == ['new_coverage', 'new_duplicated_lines_density']
+          - (sonarqube_gate.json.conditions | selectattr('metric', 'equalto', 'new_duplicated_lines_density') | first).error == '5'
+
+    - name: Read Java quality profiles
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9000/api/qualityprofiles/search?language=java
+      register: sonarqube_profiles
+
+    - name: Read rule activations
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:9000/api/rules/show?actives=true&key={{ item }}"
+      loop:
+        - java:S1176
+        - java:S106
+      register: sonarqube_rules
+
+    # The checks on Sonar way prove each listed rule really differs from the parent
+    - name: Assert the quality profile extends Sonar way with the listed rule changes
+      vars:
+        profile: "{{ sonarqube_profiles.json.profiles | selectattr('name', 'equalto', 'Molecule way') | first }}"
+        sonar_way: "{{ sonarqube_profiles.json.profiles | selectattr('name', 'equalto', 'Sonar way') | first }}"
+        activated: "{{ sonarqube_rules.results[0].json.actives | default([]) | map(attribute='qProfile') | list }}"
+        deactivated: "{{ sonarqube_rules.results[1].json.actives | default([]) | map(attribute='qProfile') | list }}"
+      ansible.builtin.assert:
+        that:
+          - profile.isDefault
+          - profile.parentName == 'Sonar way'
+          - profile.key in activated
+          - sonar_way.key not in activated
+          - profile.key not in deactivated
+          - sonar_way.key in deactivated

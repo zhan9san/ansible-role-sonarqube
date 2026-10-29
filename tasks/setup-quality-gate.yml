@@ -1,0 +1,86 @@
+---
+- name: List quality gates
+  ansible.builtin.uri:
+    url: "{{ __sonarqube_local_url }}/api/qualitygates/list"
+  register: sonarqube_gates
+
+- name: Create quality gate {{ sonarqube_quality_gate.name }}
+  ansible.builtin.uri:
+    url: "{{ __sonarqube_local_url }}/api/qualitygates/create"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      name: "{{ sonarqube_quality_gate.name }}"
+  when: sonarqube_quality_gate.name not in (sonarqube_gates.json.qualitygates | map(attribute='name'))
+  changed_when: true
+
+- name: Read quality gate {{ sonarqube_quality_gate.name }}
+  ansible.builtin.uri:
+    url: "{{ __sonarqube_local_url }}/api/qualitygates/show?name={{ sonarqube_quality_gate.name | urlencode }}"
+  register: sonarqube_gate
+
+- name: Sync conditions
+  vars:
+    __sonarqube_gate_conditions: "{{ sonarqube_gate.json.conditions | default([]) }}"
+    __sonarqube_gate_wanted: "{{ sonarqube_quality_gate.conditions | default([]) }}"
+  block:
+    - name: Remove unlisted conditions from quality gate {{ sonarqube_quality_gate.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/qualitygates/delete_condition"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          id: "{{ item.id }}"
+        status_code: 204
+      loop: "{{ __sonarqube_gate_conditions | rejectattr('metric', 'in', __sonarqube_gate_wanted | map(attribute='metric') | list) | list }}"
+      loop_control:
+        label: "{{ item.metric }}"
+      changed_when: true
+
+    - name: Update conditions of quality gate {{ sonarqube_quality_gate.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/qualitygates/update_condition"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          id: "{{ __sonarqube_gate_condition.id }}"
+          metric: "{{ item.metric }}"
+          op: "{{ item.op }}"
+          error: "{{ item.error }}"
+      vars:
+        __sonarqube_gate_condition: "{{ __sonarqube_gate_conditions | selectattr('metric', 'equalto', item.metric) | first | default({}) }}"
+      loop: "{{ __sonarqube_gate_wanted }}"
+      loop_control:
+        label: "{{ item.metric }}"
+      when:
+        - __sonarqube_gate_condition | length > 0
+        - __sonarqube_gate_condition.op != item.op or __sonarqube_gate_condition.error != (item.error | string)
+      changed_when: true
+
+    - name: Add conditions to quality gate {{ sonarqube_quality_gate.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/qualitygates/create_condition"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          gateName: "{{ sonarqube_quality_gate.name }}"
+          metric: "{{ item.metric }}"
+          op: "{{ item.op }}"
+          error: "{{ item.error }}"
+      loop: "{{ __sonarqube_gate_wanted | rejectattr('metric', 'in', __sonarqube_gate_conditions | map(attribute='metric') | list) | list }}"
+      loop_control:
+        label: "{{ item.metric }}"
+      changed_when: true
+
+- name: Make quality gate the default {{ sonarqube_quality_gate.name }}
+  ansible.builtin.uri:
+    url: "{{ __sonarqube_local_url }}/api/qualitygates/set_as_default"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      name: "{{ sonarqube_quality_gate.name }}"
+    status_code: 204
+  when:
+    - sonarqube_quality_gate.default | default(false) | bool
+    - not sonarqube_gate.json.isDefault | default(false)
+  changed_when: true

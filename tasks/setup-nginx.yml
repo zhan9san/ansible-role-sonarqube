@@ -1,0 +1,56 @@
+---
+- name: Install Nginx
+  ansible.builtin.package:
+    name: nginx
+    state: present
+
+- name: Set up ssl
+  when: sonarqube_ssl_enabled | bool
+  block:
+    - name: Ensure ssl folder exists
+      ansible.builtin.file:
+        path: "{{ sonarqube_ssl_dir }}"
+        state: directory
+        mode: "0700"
+
+    - name: Upload ssl certificate
+      ansible.builtin.copy:
+        src: "{{ sonarqube_ssl_cert }}"
+        dest: "{{ sonarqube_ssl_dir }}/{{ sonarqube_ssl_cert | basename }}"
+        mode: "0644"
+      notify: Reload Nginx
+
+    - name: Upload ssl certificate key
+      ansible.builtin.copy:
+        src: "{{ sonarqube_ssl_key }}"
+        dest: "{{ sonarqube_ssl_dir }}/{{ sonarqube_ssl_key | basename }}"
+        mode: "0600"
+      notify: Reload Nginx
+
+# SELinux only lets Nginx connect to http_port_t ports, which 9000 is not
+- name: Allow Nginx to connect to SonarQube
+  when: ansible_selinux.status | default('disabled') == 'enabled'
+  block:
+    - name: Install SELinux Python bindings
+      ansible.builtin.package:
+        name: python3-libsemanage
+        state: present
+
+    - name: Enable httpd_can_network_connect
+      ansible.posix.seboolean:
+        name: httpd_can_network_connect
+        state: true
+        persistent: true
+
+- name: Upload Nginx SonarQube config
+  ansible.builtin.template:
+    src: sonarqube.conf.j2
+    dest: /etc/nginx/conf.d/sonarqube.conf
+    mode: "0644"
+  notify: Reload Nginx
+
+- name: Ensure Nginx is started and enabled
+  ansible.builtin.service:
+    name: nginx
+    state: started
+    enabled: true

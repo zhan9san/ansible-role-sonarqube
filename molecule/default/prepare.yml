@@ -1,0 +1,75 @@
+---
+- name: Prepare
+  hosts: all
+  tasks:
+    # The test images ship without apt lists
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+      when: ansible_os_family == 'Debian'
+
+    # The minimal EL images lack the sysctl tooling a real host has
+    - name: Install procps-ng
+      ansible.builtin.package:
+        name: procps-ng
+        state: present
+      when: ansible_os_family == 'RedHat'
+
+    - name: Ensure sysctl.d exists
+      ansible.builtin.file:
+        path: /etc/sysctl.d
+        state: directory
+        mode: "0755"
+
+    - name: "Include geerlingguy.docker"
+      ansible.builtin.include_role:
+        name: "geerlingguy.docker"
+
+- name: Start a test LDAP server
+  hosts: all
+  tasks:
+    - name: Ensure LDAP test directory exists
+      ansible.builtin.file:
+        path: /opt/ldap-test
+        state: directory
+        mode: "0755"
+
+    - name: Upload LDAP test config and data
+      ansible.builtin.copy:
+        src: "{{ item }}"
+        dest: /opt/ldap-test/
+        mode: "0644"
+      loop:
+        - slapd.conf
+        - seed.ldif
+
+    - name: Start OpenLDAP from Alpine packages
+      ansible.builtin.command:
+        cmd: >-
+          docker run -d --name ldap --network host -v /opt/ldap-test:/ldap:ro alpine:3.22
+          sh -c "apk add --no-cache openldap openldap-back-mdb
+          && mkdir -p /run/openldap /var/lib/openldap/openldap-data
+          && slapadd -f /ldap/slapd.conf -l /ldap/seed.ldif
+          && exec slapd -d 0 -h ldap:/// -f /ldap/slapd.conf"
+      changed_when: true
+
+    - name: Wait for OpenLDAP
+      ansible.builtin.wait_for:
+        port: 389
+        timeout: 120
+
+- name: Generate a self-signed certificate
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Generate a self-signed certificate
+      ansible.builtin.command:
+        cmd: >-
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1
+          -subj /CN=sonarqube.example.com
+          -keyout {{ sonarqube_ssl_key }}
+          -out {{ sonarqube_ssl_cert }}
+        creates: "{{ sonarqube_ssl_cert }}"
+      vars:
+        sonarqube_ssl_cert: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/sonarqube.example.com.crt"
+        sonarqube_ssl_key: "{{ lookup('env', 'MOLECULE_EPHEMERAL_DIRECTORY') }}/sonarqube.example.com.key"
