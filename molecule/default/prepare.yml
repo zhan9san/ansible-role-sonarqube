@@ -79,6 +79,10 @@
   hosts: all
   vars:
     sonarqube_version: "{{ lookup('env', 'SONARQUBE_FROM_VERSION') | default('26.9.0.129388', true) }}"
+    # Converge must change this webhook's URL and add its secret
+    sonarqube_webhooks:
+      - name: Jenkins
+        url: https://jenkins-old.example.com/sonarqube-webhook/
   tasks:
     - name: "Include zhan9san.sonarqube"
       ansible.builtin.include_role:

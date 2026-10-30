@@ -66,3 +66,7 @@ provisioner:
             default: true
             activate: [java:S1176]
             deactivate: [java:S106]
+        sonarqube_webhooks:
+          - name: Jenkins
+            url: https://jenkins.example.com/sonarqube-webhook/
+            secret: molecule-webhook-secret

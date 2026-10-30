@@ -1,0 +1,43 @@
+---
+- name: List global webhooks
+  ansible.builtin.uri:
+    url: "{{ __sonarqube_local_url }}/api/webhooks/list"
+  register: sonarqube_webhooks_found
+
+# The list only says whether a webhook has a secret, never the secret itself
+- name: Create or update webhook
+  vars:
+    __sonarqube_webhook_found: "{{ sonarqube_webhooks_found.json.webhooks | selectattr('name', 'equalto', sonarqube_webhook.name) | first | default({}) }}"
+    __sonarqube_webhook_secret: "{{ sonarqube_webhook.secret | default('') }}"
+  block:
+    # Create rejects a blank secret, so it is only sent when set
+    - name: Create webhook {{ sonarqube_webhook.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/webhooks/create"
+        method: POST
+        body_format: form-urlencoded
+        body: >-
+          {{ {'name': sonarqube_webhook.name, 'url': sonarqube_webhook.url}
+             | combine({'secret': __sonarqube_webhook_secret} if __sonarqube_webhook_secret | length > 0 else {}) }}
+      when: __sonarqube_webhook_found | length == 0
+      changed_when: true
+      no_log: "{{ __sonarqube_webhook_secret | length > 0 }}"
+
+    # A blank secret removes the one previously set
+    - name: Update webhook {{ sonarqube_webhook.name }}
+      ansible.builtin.uri:
+        url: "{{ __sonarqube_local_url }}/api/webhooks/update"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          webhook: "{{ __sonarqube_webhook_found.key }}"
+          name: "{{ sonarqube_webhook.name }}"
+          url: "{{ sonarqube_webhook.url }}"
+          secret: "{{ __sonarqube_webhook_secret }}"
+        status_code: 204
+      when:
+        - __sonarqube_webhook_found | length > 0
+        - __sonarqube_webhook_found.url != sonarqube_webhook.url
+          or __sonarqube_webhook_found.hasSecret != (__sonarqube_webhook_secret | length > 0)
+      changed_when: true
+      no_log: "{{ __sonarqube_webhook_secret | length > 0 }}"
