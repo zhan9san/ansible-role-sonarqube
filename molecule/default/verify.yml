@@ -54,18 +54,21 @@
 - name: Verify admin settings
   hosts: all
   tasks:
-    - name: Read the server base URL with the new admin password
+    - name: Read the server base URL and settings with the new admin password
       ansible.builtin.uri:
-        url: http://127.0.0.1:9000/api/settings/values?keys=sonar.core.serverBaseURL
+        url: http://127.0.0.1:9000/api/settings/values?keys=sonar.core.serverBaseURL,sonar.validateWebhooks
         url_username: admin
         url_password: "{{ sonarqube_admin_password }}"
         force_basic_auth: true
-      register: sonarqube_base_url
+      register: sonarqube_settings_found
 
-    - name: Assert the server base URL is set
+    - name: Assert the server base URL and settings are set
+      vars:
+        settings: "{{ sonarqube_settings_found.json.settings | items2dict(key_name='key', value_name='value') }}"
       ansible.builtin.assert:
         that:
-          - sonarqube_base_url.json.settings[0].value == 'https://sonarqube.example.com'
+          - settings['sonar.core.serverBaseURL'] == 'https://sonarqube.example.com'
+          - settings['sonar.validateWebhooks'] == 'false'
 
 - name: Verify LDAP
   hosts: all
@@ -178,5 +181,5 @@
         webhook: "{{ sonarqube_webhooks_found.json.webhooks | selectattr('name', 'equalto', 'Jenkins') | first }}"
       ansible.builtin.assert:
         that:
-          - webhook.url == 'https://jenkins.example.com/sonarqube-webhook/'
+          - webhook.url == 'https://10.0.0.10/sonarqube-webhook/'
           - webhook.hasSecret
