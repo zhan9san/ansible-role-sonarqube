@@ -10,7 +10,10 @@ sonarqube_install_dir: /opt/sonarqube
 sonarqube_listen_address: 127.0.0.1
 sonarqube_port: 9000
 
-# Extra environment for the sonarqube container, e.g. SONAR_WEB_JAVAADDITIONALOPTS
+# Extra environment for the sonarqube container, e.g. SONAR_WEB_JAVAADDITIONALOPTS.
+# Any global setting can be set here as SONAR_ plus its key uppercased with . replaced by _;
+# it then overrides what the UI or API set, though the UI still shows the stored value.
+# SONAR_VALIDATEWEBHOOKS: false lets webhooks reach private addresses, such as an internal Jenkins.
 sonarqube_env: {}
 
 # Embedded Elasticsearch refuses to start below these values
@@ -88,11 +91,6 @@ sonarqube_quality_gates: []
 #     deactivate: [java:S106]
 sonarqube_quality_profiles: []
 
-# Global settings set through the Web API, for those the environment cannot set; single values only.
-# sonar.validateWebhooks: false lets webhooks reach private addresses, such as an internal Jenkins.
-#   sonar.validateWebhooks: false
-sonarqube_settings: {}
-
 # Global webhooks called when an analysis finishes, e.g. for Jenkins' waitForQualityGate.
 # Matched by name; unlisted webhooks are left alone. The optional secret (16 to 200 characters)
 # signs each payload; SonarQube never returns it, so changing only its value is not detected.
@@ -113,7 +111,7 @@ sonarqube_ssl_dir: /etc/nginx/ssl
 
 sonarqube_server_name: sonarqube.example.com
 sonarqube_schema: "{{ 'https' if sonarqube_ssl_enabled else 'http' }}"
-# Server base URL used in emails and PR decoration links; set only when sonarqube_admin_password is set
+# Server base URL used in emails, webhooks and PR decoration links
 sonarqube_url: "{{ sonarqube_schema }}://{{ sonarqube_server_name }}"
 
 # Scanners upload the whole analysis report in one request

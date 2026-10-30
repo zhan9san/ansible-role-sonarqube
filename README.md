@@ -10,8 +10,10 @@ manages its admin settings through the Web API.
   the database is migrated and the role waits until SonarQube is `UP`.
 - Optionally authenticates against LDAP or Active Directory, including
   group sync.
-- Sets the admin password, server base URL, global settings, groups,
-  permission templates, quality gates, quality profiles and webhooks.
+- Sets the server base URL and other settings as container environment
+  variables, which take precedence over changes made in the UI.
+- Sets the admin password, groups, permission templates, quality gates,
+  quality profiles and webhooks through the Web API.
 
 ## Requirements
 
@@ -37,10 +39,29 @@ Only `sonarqube_db_password` is required. See
 | `sonarqube_install_dir` | `/opt/sonarqube` | Holds `docker-compose.yml` and `.env` |
 | `sonarqube_listen_address` | `127.0.0.1` | Host address SonarQube is published on |
 | `sonarqube_port` | `9000` | Host port SonarQube is published on |
-| `sonarqube_env` | `{}` | Extra container environment, such as `SONAR_WEB_JAVAADDITIONALOPTS` |
+| `sonarqube_env` | `{}` | Extra container environment, such as `SONAR_WEB_JAVAADDITIONALOPTS` or [settings](#settings) |
 | `sonarqube_db_image` | `postgres:17` | PostgreSQL image |
 | `sonarqube_db_data_dir` | `/var/lib/postgresql/data` | Use `/var/lib/postgresql` for postgres 18+ |
 | `sonarqube_db_password` | `""` | Required; must not contain a single quote |
+
+### Settings
+
+Set any global setting in `sonarqube_env` as `SONAR_` plus its key in
+uppercase, with `.` replaced by `_`:
+
+```yaml
+sonarqube_env:
+  SONAR_VALIDATEWEBHOOKS: false
+```
+
+SonarQube reads these before the values stored through the UI or API, so
+they are always in effect and the UI cannot override them. The UI and
+`api/settings/values` still show the stored value, while `api/system/info`
+shows the effective one. Changing a setting recreates the container.
+
+`sonarqube_url` (`https://` or `http://` plus `sonarqube_server_name`) is
+passed as `SONAR_CORE_SERVERBASEURL`, the base URL used in email, webhook
+and pull request links.
 
 ### Nginx
 
@@ -113,19 +134,12 @@ sonarqube_quality_profiles:
     activate: [java:S1176]
     deactivate: [java:S106]
 
-# Single-value global settings the environment cannot set
-sonarqube_settings:
-  sonar.validateWebhooks: false
-
 # Global webhooks, matched by name; the secret is optional
 sonarqube_webhooks:
   - name: Jenkins
     url: https://jenkins.example.com/sonarqube-webhook/
     secret: "{{ vault_sonarqube_webhook_secret }}"
 ```
-
-`sonarqube_url` (`https://` or `http://` plus `sonarqube_server_name`)
-becomes the server base URL used in email and pull request links.
 
 Quality profiles extend their parent as
 [SonarSource recommends](https://docs.sonarsource.com/sonarqube-server/latest/quality-standards-administration/managing-quality-profiles/creating-a-quality-profile/),
@@ -140,8 +154,8 @@ unsigned calls.
 
 SonarQube refuses webhooks to loopback, link-local and private addresses
 such as `10.0.0.0/8`, both when they are created and when they are
-called. Set `sonar.validateWebhooks: false` in `sonarqube_settings` for a
-CI server on an internal network; it then also lets project admins point
+called. Set `SONAR_VALIDATEWEBHOOKS: false` in `sonarqube_env` for a CI
+server on an internal network; it then also lets project admins point
 webhooks at any internal address.
 
 ## Dependencies
@@ -169,8 +183,8 @@ None. Install Docker before this role runs.
 
 | Tag | Runs |
 | --- | --- |
-| `install` | Kernel parameters, Docker Compose stack, upgrades |
-| `admin` | Admin password, base URL, settings, groups, templates, gates, profiles and webhooks |
+| `install` | Kernel parameters, Docker Compose stack and settings, upgrades |
+| `admin` | Admin password, groups, templates, gates, profiles and webhooks |
 | `nginx` | Nginx and the TLS certificate |
 
 ## Upgrading

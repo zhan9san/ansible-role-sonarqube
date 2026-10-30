@@ -66,8 +66,8 @@ provisioner:
             default: true
             activate: [java:S1176]
             deactivate: [java:S106]
-        sonarqube_settings:
-          sonar.validateWebhooks: false
+        sonarqube_env:
+          SONAR_VALIDATEWEBHOOKS: false
         # A private address, which SonarQube only accepts with sonar.validateWebhooks off
         sonarqube_webhooks:
           - name: Jenkins

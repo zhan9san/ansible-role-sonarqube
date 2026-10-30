@@ -54,21 +54,20 @@
 - name: Verify admin settings
   hosts: all
   tasks:
-    - name: Read the server base URL and settings with the new admin password
+    # api/settings/values only shows stored values, system info the effective ones from the environment
+    - name: Read system info with the new admin password
       ansible.builtin.uri:
-        url: http://127.0.0.1:9000/api/settings/values?keys=sonar.core.serverBaseURL,sonar.validateWebhooks
+        url: http://127.0.0.1:9000/api/system/info
         url_username: admin
         url_password: "{{ sonarqube_admin_password }}"
         force_basic_auth: true
-      register: sonarqube_settings_found
+      register: sonarqube_info
 
-    - name: Assert the server base URL and settings are set
-      vars:
-        settings: "{{ sonarqube_settings_found.json.settings | items2dict(key_name='key', value_name='value') }}"
+    - name: Assert the server base URL and settings from the environment are in effect
       ansible.builtin.assert:
         that:
-          - settings['sonar.core.serverBaseURL'] == 'https://sonarqube.example.com'
-          - settings['sonar.validateWebhooks'] == 'false'
+          - sonarqube_info.json.Settings['sonar.core.serverBaseURL'] == 'https://sonarqube.example.com'
+          - sonarqube_info.json.Settings['sonar.validateWebhooks'] == 'false'
 
 - name: Verify LDAP
   hosts: all
