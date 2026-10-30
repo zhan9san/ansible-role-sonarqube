@@ -10,8 +10,8 @@ manages its admin settings through the Web API.
   the database is migrated and the role waits until SonarQube is `UP`.
 - Optionally authenticates against LDAP or Active Directory, including
   group sync.
-- Sets the admin password, server base URL, groups, permission templates,
-  quality gates, quality profiles and webhooks.
+- Sets the admin password, server base URL, global settings, groups,
+  permission templates, quality gates, quality profiles and webhooks.
 
 ## Requirements
 
@@ -113,6 +113,10 @@ sonarqube_quality_profiles:
     activate: [java:S1176]
     deactivate: [java:S106]
 
+# Single-value global settings the environment cannot set
+sonarqube_settings:
+  sonar.validateWebhooks: false
+
 # Global webhooks, matched by name; the secret is optional
 sonarqube_webhooks:
   - name: Jenkins
@@ -133,6 +137,12 @@ one pointing to `https://<jenkins>/sonarqube-webhook/`. SonarQube signs
 each payload with the secret, which must have 16 to 200 characters; set
 the same secret in the plugin's global configuration so Jenkins rejects
 unsigned calls.
+
+SonarQube refuses webhooks to loopback, link-local and private addresses
+such as `10.0.0.0/8`, both when they are created and when they are
+called. Set `sonar.validateWebhooks: false` in `sonarqube_settings` for a
+CI server on an internal network; it then also lets project admins point
+webhooks at any internal address.
 
 ## Dependencies
 
@@ -160,7 +170,7 @@ None. Install Docker before this role runs.
 | Tag | Runs |
 | --- | --- |
 | `install` | Kernel parameters, Docker Compose stack, upgrades |
-| `admin` | Admin password, base URL, groups, templates, gates, profiles and webhooks |
+| `admin` | Admin password, base URL, settings, groups, templates, gates, profiles and webhooks |
 | `nginx` | Nginx and the TLS certificate |
 
 ## Upgrading

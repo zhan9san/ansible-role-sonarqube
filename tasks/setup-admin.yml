@@ -48,6 +48,40 @@
   when: (sonarqube_base_url.json.settings | map(attribute='value') | first | default('')) != sonarqube_url
   changed_when: true
 
+# The environment only overrides process properties, so other settings go through the API
+- name: Read global settings
+  ansible.builtin.uri:
+    url: "{{ __sonarqube_local_url }}/api/settings/values?keys={{ sonarqube_settings.keys() | join(',') | urlencode }}"
+    url_username: admin
+    url_password: "{{ sonarqube_admin_password }}"
+    force_basic_auth: true
+  register: sonarqube_settings_found
+  when: sonarqube_settings | length > 0
+
+# Before webhooks, as sonar.validateWebhooks decides which URLs they may use
+- name: Set global settings
+  ansible.builtin.uri:
+    url: "{{ __sonarqube_local_url }}/api/settings/set"
+    method: POST
+    url_username: admin
+    url_password: "{{ sonarqube_admin_password }}"
+    force_basic_auth: true
+    body_format: form-urlencoded
+    body:
+      key: "{{ item.key }}"
+      value: "{{ __sonarqube_setting_value }}"
+    status_code: 204
+  vars:
+    # A YAML boolean would otherwise be sent as True or False
+    __sonarqube_setting_value: "{{ item.value | string | lower if item.value is boolean else item.value | string }}"
+  loop: "{{ sonarqube_settings | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: >-
+    (sonarqube_settings_found.json.settings | selectattr('key', 'equalto', item.key)
+    | map(attribute='value') | first | default('')) != __sonarqube_setting_value
+  changed_when: true
+
 # The files below call the API as admin with the new password
 - name: Set up groups
   ansible.builtin.include_tasks:

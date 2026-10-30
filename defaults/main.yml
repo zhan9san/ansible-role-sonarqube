@@ -88,6 +88,11 @@ sonarqube_quality_gates: []
 #     deactivate: [java:S106]
 sonarqube_quality_profiles: []
 
+# Global settings set through the Web API, for those the environment cannot set; single values only.
+# sonar.validateWebhooks: false lets webhooks reach private addresses, such as an internal Jenkins.
+#   sonar.validateWebhooks: false
+sonarqube_settings: {}
+
 # Global webhooks called when an analysis finishes, e.g. for Jenkins' waitForQualityGate.
 # Matched by name; unlisted webhooks are left alone. The optional secret (16 to 200 characters)
 # signs each payload; SonarQube never returns it, so changing only its value is not detected.
