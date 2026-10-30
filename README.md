@@ -11,7 +11,7 @@ manages its admin settings through the Web API.
 - Optionally authenticates against LDAP or Active Directory, including
   group sync.
 - Sets the admin password, server base URL, groups, permission templates,
-  quality gates and quality profiles.
+  quality gates, quality profiles and webhooks.
 
 ## Requirements
 
@@ -112,6 +112,12 @@ sonarqube_quality_profiles:
     default: true
     activate: [java:S1176]
     deactivate: [java:S106]
+
+# Global webhooks, matched by name; the secret is optional
+sonarqube_webhooks:
+  - name: Jenkins
+    url: https://jenkins.example.com/sonarqube-webhook/
+    secret: "{{ vault_sonarqube_webhook_secret }}"
 ```
 
 `sonarqube_url` (`https://` or `http://` plus `sonarqube_server_name`)
@@ -120,6 +126,13 @@ becomes the server base URL used in email and pull request links.
 Quality profiles extend their parent as
 [SonarSource recommends](https://docs.sonarsource.com/sonarqube-server/latest/quality-standards-administration/managing-quality-profiles/creating-a-quality-profile/),
 so new rules arrive with SonarQube upgrades.
+
+A webhook tells a CI server when the quality gate of an analysis is
+computed. The Jenkins SonarQube plugin's `waitForQualityGate` step needs
+one pointing to `https://<jenkins>/sonarqube-webhook/`. SonarQube signs
+each payload with the secret, which must have 16 to 200 characters; set
+the same secret in the plugin's global configuration so Jenkins rejects
+unsigned calls.
 
 ## Dependencies
 
@@ -147,7 +160,7 @@ None. Install Docker before this role runs.
 | Tag | Runs |
 | --- | --- |
 | `install` | Kernel parameters, Docker Compose stack, upgrades |
-| `admin` | Admin password, base URL, groups, templates, gates and profiles |
+| `admin` | Admin password, base URL, groups, templates, gates, profiles and webhooks |
 | `nginx` | Nginx and the TLS certificate |
 
 ## Upgrading
@@ -172,6 +185,10 @@ MOLECULE_DISTRO=rockylinux9 molecule test
 
 - Group permissions are only added. Permission templates and quality gates
   are synced exactly, but removing one from the list does not delete it.
+  The same goes for webhooks.
+- SonarQube never returns a webhook's secret, only whether it has one, so
+  changing just the secret's value is not applied. Delete the webhook in
+  SonarQube and run the role to recreate it with the new secret.
 - Group names need at least 3 characters, the minimum the lookup API
   searches for.
 - Reading a group's or template's current permissions uses internal Web

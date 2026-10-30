@@ -96,3 +96,14 @@
   loop_control:
     loop_var: sonarqube_quality_profile
     label: "{{ sonarqube_quality_profile.language }}/{{ sonarqube_quality_profile.name }}"
+
+- name: Set up webhooks
+  ansible.builtin.include_tasks:
+    file: setup-webhook.yml
+    apply:
+      tags: admin
+      module_defaults: *admin_api
+  loop: "{{ sonarqube_webhooks }}"
+  loop_control:
+    loop_var: sonarqube_webhook
+    label: "{{ sonarqube_webhook.name }}"

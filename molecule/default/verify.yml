@@ -91,7 +91,7 @@
         url_password: jane-password
         force_basic_auth: true
 
-- name: Verify permission templates, quality gates and quality profiles
+- name: Verify permission templates, quality gates, quality profiles and webhooks
   hosts: all
   module_defaults:
     ansible.builtin.uri:
@@ -166,3 +166,17 @@
           - sonar_way_key not in activated
           - profile.key not in deactivated
           - sonar_way_key in deactivated
+
+    - name: Read global webhooks
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9000/api/webhooks/list
+      register: sonarqube_webhooks_found
+
+    # prepare.yml created it with another URL and no secret, so this proves the update
+    - name: Assert the Jenkins webhook has the listed URL and a secret
+      vars:
+        webhook: "{{ sonarqube_webhooks_found.json.webhooks | selectattr('name', 'equalto', 'Jenkins') | first }}"
+      ansible.builtin.assert:
+        that:
+          - webhook.url == 'https://jenkins.example.com/sonarqube-webhook/'
+          - webhook.hasSecret
