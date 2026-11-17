@@ -16,6 +16,11 @@ sonarqube_port: 9000
 # SONAR_VALIDATEWEBHOOKS: false lets webhooks reach private addresses, such as an internal Jenkins.
 sonarqube_env: {}
 
+# Memory limit for the sonarqube container, e.g. 2560m; "" means none. It must cover the heaps of
+# the web server, Compute Engine and Elasticsearch JVMs (1G, 1536m and 512m by default) plus their
+# off-heap memory; lower the first two with SONAR_WEB_JAVAOPTS and SONAR_CE_JAVAOPTS in sonarqube_env.
+sonarqube_mem_limit: ""
+
 # Embedded Elasticsearch refuses to start below these values
 sonarqube_sysctl:
   vm.max_map_count: 524288
@@ -25,6 +30,8 @@ sonarqube_sysctl:
 sonarqube_db_image: "postgres:17"
 # postgres 18+ images keep their data in /var/lib/postgresql
 sonarqube_db_data_dir: /var/lib/postgresql/data
+# Memory limit for the PostgreSQL container, e.g. 384m; "" means none
+sonarqube_db_mem_limit: ""
 sonarqube_db_name: sonar
 sonarqube_db_user: sonar
 # Required; must not contain a single quote

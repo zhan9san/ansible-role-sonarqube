@@ -5,6 +5,9 @@ services:
     image: {{ sonarqube_image }}
     container_name: sonarqube
     restart: unless-stopped
+{% if sonarqube_mem_limit %}
+    mem_limit: {{ sonarqube_mem_limit | to_json }}
+{% endif %}
     read_only: true
     depends_on:
       db:
@@ -52,6 +55,9 @@ services:
     image: {{ sonarqube_db_image }}
     container_name: sonarqube-db
     restart: unless-stopped
+{% if sonarqube_db_mem_limit %}
+    mem_limit: {{ sonarqube_db_mem_limit | to_json }}
+{% endif %}
     environment:
       POSTGRES_DB: {{ sonarqube_db_name }}
       POSTGRES_USER: {{ sonarqube_db_user }}
