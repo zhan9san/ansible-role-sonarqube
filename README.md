@@ -40,8 +40,10 @@ Only `sonarqube_db_password` is required. See
 | `sonarqube_listen_address` | `127.0.0.1` | Host address SonarQube is published on |
 | `sonarqube_port` | `9000` | Host port SonarQube is published on |
 | `sonarqube_env` | `{}` | Extra container environment, such as `SONAR_WEB_JAVAADDITIONALOPTS` or [settings](#settings) |
+| `sonarqube_mem_limit` | `""` | SonarQube container memory limit, such as `2560m`; see [Memory](#memory) |
 | `sonarqube_db_image` | `postgres:17` | PostgreSQL image |
 | `sonarqube_db_data_dir` | `/var/lib/postgresql/data` | Use `/var/lib/postgresql` for postgres 18+ |
+| `sonarqube_db_mem_limit` | `""` | PostgreSQL container memory limit, such as `384m` |
 | `sonarqube_db_password` | `""` | Required; must not contain a single quote |
 
 ### Settings
@@ -62,6 +64,26 @@ shows the effective one. Changing a setting recreates the container.
 `sonarqube_url` (`https://` or `http://` plus `sonarqube_server_name`) is
 passed as `SONAR_CORE_SERVERBASEURL`, the base URL used in email, webhook
 and pull request links.
+
+### Memory
+
+`sonarqube_mem_limit` caps the whole SonarQube container, which runs three
+JVMs. Their default heaps are 1G for the web server, 1536m for the Compute
+Engine and 512m for Elasticsearch, which also takes 256m of direct memory.
+The limit needs room above them for off-heap memory; to fit a smaller one,
+lower the first two heaps in `sonarqube_env`:
+
+```yaml
+sonarqube_mem_limit: 2560m
+sonarqube_db_mem_limit: 384m
+sonarqube_env:
+  SONAR_WEB_JAVAOPTS: -Xmx512m -Xms128m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/opt/sonarqube/logs
+  SONAR_CE_JAVAOPTS: -Xmx512m -Xms128m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/opt/sonarqube/logs
+```
+
+These variables replace SonarQube's defaults rather than adding to them.
+The JVMs run in `/opt/sonarqube`, which is read-only in the container, so
+point `HeapDumpPath` at the writable logs volume.
 
 ### Nginx
 

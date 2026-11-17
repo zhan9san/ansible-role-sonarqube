@@ -16,6 +16,20 @@
           - (sonarqube_container.stdout | from_json)[0].Config.Image == sonarqube_image
         fail_msg: "Expected {{ sonarqube_image }}."
 
+    - name: Read the PostgreSQL container
+      ansible.builtin.command: docker inspect --type container sonarqube-db
+      register: sonarqube_db_container
+      changed_when: false
+
+    - name: Assert the containers have their memory limits
+      ansible.builtin.assert:
+        that:
+          - (sonarqube_container.stdout | from_json)[0].HostConfig.Memory == 4 * 1024 ** 3
+          - (sonarqube_db_container.stdout | from_json)[0].HostConfig.Memory == 512 * 1024 ** 2
+        fail_msg: >-
+          Limits are {{ (sonarqube_container.stdout | from_json)[0].HostConfig.Memory }} and
+          {{ (sonarqube_db_container.stdout | from_json)[0].HostConfig.Memory }} bytes.
+
     - name: Read the published SonarQube port
       ansible.builtin.command: docker port sonarqube 9000/tcp
       register: sonarqube_port_binding
